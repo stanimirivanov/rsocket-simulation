@@ -142,7 +142,6 @@ tail.
 kubectl apply -f tekton/rbac.yaml
 kubectl apply -f tekton/tasks.yaml
 kubectl apply -f tekton/pipeline.yaml
-kubectl create -f tekton/pipelinerun.example.yaml
 tkn pipelinerun logs --last -f
 ```
 

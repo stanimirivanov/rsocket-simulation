@@ -1,22 +1,37 @@
-name: Run Tekton Simulation on Oracle OKE
+name: Run Simulation on Oracle OKE
 
 on:
   workflow_dispatch:
     inputs:
-      connectionCount:
-        description: 'Number of RSocket connections to open'
+      serverUri:
+        description: 'RSocket Target Server URI'
         required: true
-        default: '1000'
+        default: 'ws://rsocket-server.default.svc.cluster.local:7000'
         type: string
-      targetHost:
-        description: 'The RSocket target server host/IP'
+      route:
+        description: 'RSocket routing frame endpoint'
         required: true
-        default: 'rsocket-server.default.svc.cluster.local'
+        default: 'simulation.stream'
         type: string
-      targetPort:
-        description: 'The RSocket target server port'
+      shards:
+        description: 'Number of simulation shards (Pods)'
         required: true
-        default: '7000'
+        default: '4'
+        type: string
+      parallelism:
+        description: 'Parallel client execution threads per shard'
+        required: true
+        default: '4'
+        type: string
+      connectionsPerShard:
+        description: 'RSocket connections established per shard'
+        required: true
+        default: '500'
+        type: string
+      duration:
+        description: 'Simulation run time (ISO-8601 duration string)'
+        required: true
+        default: 'PT10M'
         type: string
 
 env:
@@ -51,6 +66,17 @@ jobs:
           curl -LO https://github.com/tektoncd/cli/releases/download/v0.38.0/tkn_0.38.0_Linux_x86_64.tar.gz
           sudo tar xvzf tkn_0.38.0_Linux_x86_64.tar.gz -C /usr/local/bin tkn
 
+      - name: Ensure Tekton Pipelines Engine is Installed
+        run: |
+          if ! kubectl get namespace tekton-pipelines >/dev/null 2>&1; then
+            echo "Tekton Engine not found. Installing..."
+            kubectl apply -f https://storage.googleapis.com/tekton-releases/pipeline/v0.68.0/release.yaml
+            kubectl rollout status deployment/tekton-pipelines-controller -n tekton-pipelines --timeout=120s
+            kubectl rollout status deployment/tekton-pipelines-webhook -n tekton-pipelines --timeout=120s
+          else
+            echo "Tekton Engine is already installed. Skipping installation."
+          fi
+
       - name: Apply Tekton Manifests
         run: |
           kubectl apply -f tekton/rbac.yaml
@@ -60,27 +86,44 @@ jobs:
       - name: Execute Tekton PipelineRun
         run: |
           RUN_NAME="rsocket-run-${{ github.run_id }}-${{ github.run_attempt }}"
-          
+      
           cat <<EOF | kubectl apply -f -
-          apiVersion: tekton.dev/v1beta1
+          apiVersion: tekton.dev/v1
           kind: PipelineRun
           metadata:
             name: ${RUN_NAME}
             namespace: default
           spec:
             pipelineRef:
-              name: rsocket-simulation-pipeline
+              name: rsocket-simulation
+            taskRunTemplate:
+              serviceAccountName: rsocket-simulation-pipeline
+            workspaces:
+              - name: shared
+                emptyDir: {}
             params:
+              - name: repositoryUrl
+                value: "${{ github.server_url }}/${{ github.repository }}.git"
+              - name: revision
+                value: "${{ github.ref_name }}"
+              - name: releaseName
+                value: "rsocket-sim"
               - name: image
                 value: "${{ env.IMAGE }}"
-              - name: connectionCount
-                value: "${{ inputs.connectionCount }}"
-              - name: targetHost
-                value: "${{ inputs.targetHost }}"
-              - name: targetPort
-                value: "${{ inputs.targetPort }}"
+              - name: serverUri
+                value: "${{ inputs.serverUri }}"
+              - name: route
+                value: "${{ inputs.route }}"
+              - name: shards
+                value: "${{ inputs.shards }}"
+              - name: parallelism
+                value: "${{ inputs.parallelism }}"
+              - name: connectionsPerShard
+                value: "${{ inputs.connectionsPerShard }}"
+              - name: duration
+                value: "${{ inputs.duration }}"
           EOF
-
+      
           echo "RUN_NAME=${RUN_NAME}" >> $GITHUB_ENV
 
       - name: Stream Tekton Logs
