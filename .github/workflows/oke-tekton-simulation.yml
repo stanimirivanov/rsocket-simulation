@@ -1,0 +1,88 @@
+name: Run Tekton Simulation on Oracle OKE
+
+on:
+  workflow_dispatch:
+    inputs:
+      connectionCount:
+        description: 'Number of RSocket connections to open'
+        required: true
+        default: '1000'
+        type: string
+      targetHost:
+        description: 'The RSocket target server host/IP'
+        required: true
+        default: 'rsocket-server.default.svc.cluster.local'
+        type: string
+      targetPort:
+        description: 'The RSocket target server port'
+        required: true
+        default: '7000'
+        type: string
+
+env:
+  IMAGE: ghcr.io/stanimirivanov/rsocket-simulation:2.0.0
+  # OCI Environment variables used by oracle-actions
+  OCI_CLI_USER: ${{ secrets.OCI_CLI_USER }}
+  OCI_CLI_TENANCY: ${{ secrets.OCI_CLI_TENANCY }}
+  OCI_CLI_FINGERPRINT: ${{ secrets.OCI_CLI_FINGERPRINT }}
+  OCI_CLI_KEY_CONTENT: ${{ secrets.OCI_CLI_KEY_CONTENT }}
+  OCI_CLI_REGION: ${{ secrets.OCI_CLI_REGION }}
+
+jobs:
+  execute-simulation:
+    name: Run simulation
+    runs-on: ubuntu-latest
+    environment: oci-oke-demo
+
+    # Strictly allow ONLY the repository owner
+    if: github.actor == github.repository_owner
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure Kubectl for OKE
+        uses: oracle-actions/configure-kubectl-oke@v1.5.0
+        with:
+          cluster: ${{ secrets.OKE_CLUSTER_OCID }}
+
+      - name: Install Tekton CLI
+        run: |
+          curl -LO https://github.com/tektoncd/cli/releases/download/v0.38.0/tkn_0.38.0_Linux_x86_64.tar.gz
+          sudo tar xvzf tkn_0.38.0_Linux_x86_64.tar.gz -C /usr/local/bin tkn
+
+      - name: Apply Tekton Manifests
+        run: |
+          kubectl apply -f tekton/rbac.yaml
+          kubectl apply -f tekton/tasks.yaml
+          kubectl apply -f tekton/pipeline.yaml
+
+      - name: Execute Tekton PipelineRun
+        run: |
+          RUN_NAME="rsocket-run-${{ github.run_id }}-${{ github.run_attempt }}"
+          
+          cat <<EOF | kubectl apply -f -
+          apiVersion: tekton.dev/v1beta1
+          kind: PipelineRun
+          metadata:
+            name: ${RUN_NAME}
+            namespace: default
+          spec:
+            pipelineRef:
+              name: rsocket-simulation-pipeline
+            params:
+              - name: image
+                value: "${{ env.IMAGE }}"
+              - name: connectionCount
+                value: "${{ inputs.connectionCount }}"
+              - name: targetHost
+                value: "${{ inputs.targetHost }}"
+              - name: targetPort
+                value: "${{ inputs.targetPort }}"
+          EOF
+
+          echo "RUN_NAME=${RUN_NAME}" >> $GITHUB_ENV
+
+      - name: Stream Tekton Logs
+        run: |
+          tkn pipelinerun logs -f "${{ env.RUN_NAME }}" -n default
