@@ -7,7 +7,7 @@ large test into independent shards.
 
 ## Architecture
 
-An **Indexed Kubernetes Job** is the right primitive for this finite workload.
+For this finite workload, an **Indexed Kubernetes Job** is the chosen primitive.
 Each pod receives a stable
 `JOB_COMPLETION_INDEX` and opens `connectionsPerShard` connections. For example,
 8 shards × 500 connections requests 4,000 total connections. `parallelism` can

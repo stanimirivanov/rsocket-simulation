@@ -21,5 +21,6 @@ public record SimulationProperties(
         @NotNull Duration keepAliveLifetime,
         @NotNull Duration reconnectDelay,
         @Min(0) int shardIndex,
-        @NotBlank String payloadMessage) {
+        @NotBlank String payloadMessage,
+        boolean exitOnCompletion) {
 }
