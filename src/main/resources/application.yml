@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: rsocket-simulation
+  main:
+    web-application-type: none
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+simulation:
+  server-uri: ${SIMULATION_SERVER_URI:ws://localhost:7000/rsocket}
+  route: ${SIMULATION_ROUTE:simulation.stream}
+  connections: ${SIMULATION_CONNECTIONS:100}
+  duration: ${SIMULATION_DURATION:PT5M}
+  ramp-up: ${SIMULATION_RAMP_UP:PT30S}
+  keep-alive-interval: ${SIMULATION_KEEP_ALIVE_INTERVAL:PT10S}
+  keep-alive-lifetime: ${SIMULATION_KEEP_ALIVE_LIFETIME:PT30S}
+  reconnect-delay: ${SIMULATION_RECONNECT_DELAY:PT2S}
+  shard-index: ${JOB_COMPLETION_INDEX:0}
+  payload-message: ${SIMULATION_PAYLOAD_MESSAGE:hello from the RSocket simulator}
+
+logging:
+  level:
+    root: INFO
+    org.izanagi.perf.rsocket: INFO

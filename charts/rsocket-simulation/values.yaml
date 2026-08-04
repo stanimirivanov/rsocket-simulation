@@ -1,0 +1,35 @@
+image:
+  repository: rsocket-simulation
+  tag: 2.0.0-SNAPSHOT
+  pullPolicy: IfNotPresent
+
+simulation:
+  serverUri: ws://rsocket-server:7000/rsocket
+  route: simulation.stream
+  shards: 4
+  parallelism: 4
+  connectionsPerShard: 500
+  duration: PT10M
+  rampUp: PT1M
+  keepAliveInterval: PT10S
+  keepAliveLifetime: PT30S
+  reconnectDelay: PT2S
+  payloadMessage: hello from the RSocket simulator
+
+job:
+  backoffLimitPerIndex: 1
+  ttlSecondsAfterFinished: 3600
+  activeDeadlineSeconds: 1800
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

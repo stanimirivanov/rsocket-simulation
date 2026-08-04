@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rsocket-simulation.fullname" . }}
+  labels:
+    {{- include "rsocket-simulation.labels" . | nindent 4 }}
+data:
+  SIMULATION_SERVER_URI: {{ required "simulation.serverUri is required" .Values.simulation.serverUri | quote }}
+  SIMULATION_ROUTE: {{ .Values.simulation.route | quote }}
+  SIMULATION_CONNECTIONS: {{ .Values.simulation.connectionsPerShard | quote }}
+  SIMULATION_DURATION: {{ .Values.simulation.duration | quote }}
+  SIMULATION_RAMP_UP: {{ .Values.simulation.rampUp | quote }}
+  SIMULATION_KEEP_ALIVE_INTERVAL: {{ .Values.simulation.keepAliveInterval | quote }}
+  SIMULATION_KEEP_ALIVE_LIFETIME: {{ .Values.simulation.keepAliveLifetime | quote }}
+  SIMULATION_RECONNECT_DELAY: {{ .Values.simulation.reconnectDelay | quote }}
+  SIMULATION_PAYLOAD_MESSAGE: {{ .Values.simulation.payloadMessage | quote }}

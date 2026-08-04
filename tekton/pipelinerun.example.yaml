@@ -1,0 +1,30 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: rsocket-simulation-
+spec:
+  taskRunTemplate:
+    serviceAccountName: rsocket-simulation-pipeline
+  pipelineRef:
+    name: rsocket-simulation
+  timeouts:
+    pipeline: 30m
+    tasks: 25m
+  params:
+    - {name: repositoryUrl, value: "https://github.com/example/rsocket-simulation.git"}
+    - {name: revision, value: main}
+    - {name: releaseName, value: simulation-demo}
+    - {name: image, value: "registry.example.com/rsocket-simulation:2.0.0"}
+    - {name: serverUri, value: "wss://rsocket.example.com/rsocket"}
+    - {name: shards, value: "8"}
+    - {name: parallelism, value: "8"}
+    - {name: connectionsPerShard, value: "500"}
+    - {name: duration, value: PT10M}
+  workspaces:
+    - name: shared
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 256Mi

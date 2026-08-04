@@ -1,0 +1,62 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: rsocket-simulation
+spec:
+  workspaces:
+    - name: shared
+  params:
+    - name: repositoryUrl
+      type: string
+    - name: revision
+      type: string
+      default: main
+    - name: releaseName
+      type: string
+    - name: image
+      type: string
+    - name: serverUri
+      type: string
+    - name: route
+      type: string
+      default: simulation.stream
+    - name: shards
+      type: string
+      default: "4"
+    - name: parallelism
+      type: string
+      default: "4"
+    - name: connectionsPerShard
+      type: string
+      default: "500"
+    - name: duration
+      type: string
+      default: PT10M
+  tasks:
+    - name: prepare
+      taskRef:
+        name: clone-and-validate-rsocket-simulation
+      workspaces:
+        - name: source
+          workspace: shared
+      params:
+        - name: repositoryUrl
+          value: $(params.repositoryUrl)
+        - name: revision
+          value: $(params.revision)
+    - name: simulate
+      runAfter: [prepare]
+      taskRef:
+        name: run-rsocket-simulation
+      workspaces:
+        - name: source
+          workspace: shared
+      params:
+        - {name: releaseName, value: "$(params.releaseName)"}
+        - {name: image, value: "$(params.image)"}
+        - {name: serverUri, value: "$(params.serverUri)"}
+        - {name: route, value: "$(params.route)"}
+        - {name: shards, value: "$(params.shards)"}
+        - {name: parallelism, value: "$(params.parallelism)"}
+        - {name: connectionsPerShard, value: "$(params.connectionsPerShard)"}
+        - {name: duration, value: "$(params.duration)"}

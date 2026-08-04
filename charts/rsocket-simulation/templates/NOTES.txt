@@ -1,0 +1,4 @@
+The simulation is running as Indexed Job {{ include "rsocket-simulation.fullname" . }}.
+Total requested connections: {{ mul .Values.simulation.shards .Values.simulation.connectionsPerShard }}
+
+kubectl logs -l job-name={{ include "rsocket-simulation.fullname" . }} --all-containers --prefix

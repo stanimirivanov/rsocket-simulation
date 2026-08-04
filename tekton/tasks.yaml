@@ -1,0 +1,101 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: clone-and-validate-rsocket-simulation
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: repositoryUrl
+      type: string
+    - name: revision
+      type: string
+      default: main
+  steps:
+    - name: clone
+      image: alpine/git:2.49.1
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -eu
+        rm -rf source
+        git clone --depth 1 --branch "$(params.revision)" "$(params.repositoryUrl)" source
+    - name: lint-chart
+      image: alpine/helm:3.18.4
+      workingDir: $(workspaces.source.path)/source
+      script: |
+        #!/bin/sh
+        set -eu
+        helm lint charts/rsocket-simulation
+        helm template test charts/rsocket-simulation >/dev/null
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: run-rsocket-simulation
+spec:
+  workspaces:
+    - name: source
+  params:
+    - name: releaseName
+      type: string
+    - name: image
+      type: string
+    - name: serverUri
+      type: string
+    - name: route
+      type: string
+      default: simulation.stream
+    - name: shards
+      type: string
+      default: "4"
+    - name: parallelism
+      type: string
+      default: "4"
+    - name: connectionsPerShard
+      type: string
+      default: "500"
+    - name: duration
+      type: string
+      default: PT10M
+    - name: timeout
+      type: string
+      default: 20m
+  results:
+    - name: jobName
+      description: Name of the Kubernetes Job that ran the simulation
+  steps:
+    - name: launch
+      image: alpine/helm:3.18.4
+      workingDir: $(workspaces.source.path)/source
+      script: |
+        #!/bin/sh
+        set -eu
+        repository="$(params.image)"
+        tag="latest"
+        case "$repository" in
+          *:*) tag="${repository##*:}"; repository="${repository%:*}" ;;
+        esac
+        helm upgrade --install "$(params.releaseName)" charts/rsocket-simulation \
+          --set-string image.repository="$repository" \
+          --set-string image.tag="$tag" \
+          --set-string simulation.serverUri="$(params.serverUri)" \
+          --set-string simulation.route="$(params.route)" \
+          --set simulation.shards="$(params.shards)" \
+          --set simulation.parallelism="$(params.parallelism)" \
+          --set simulation.connectionsPerShard="$(params.connectionsPerShard)" \
+          --set-string simulation.duration="$(params.duration)" \
+          --wait --timeout 2m
+        printf '%s' "$(params.releaseName)-rsocket-simulation" > "$(results.jobName.path)"
+    - name: await-result
+      image: bitnami/kubectl:1.33
+      script: |
+        #!/bin/sh
+        set -eu
+        job="$(cat "$(results.jobName.path)")"
+        kubectl wait --for=condition=complete "job/$job" --timeout="$(params.timeout)" || {
+          kubectl get "job/$job" -o wide
+          kubectl get pods -l "job-name=$job" -o wide
+          exit 1
+        }
+        kubectl logs -l "job-name=$job" --all-containers --prefix --tail=100
