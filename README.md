@@ -51,19 +51,67 @@ inject credentials through a Kubernetes Secret.
 
 ## Container image
 
-The Fabric8 Docker Maven Plugin builds an image using the packaged Spring Boot
-jar:
+The Fabric8 Docker Maven Plugin builds the packaged Spring Boot jar into a
+non-root OCI image. The `image` profile binds image creation to Maven's
+`package` phase:
 
 ```shell
-mvn clean package docker:build \
+mvn clean package -Pimage \
   -Dimage.name=registry.example.com/performance/rsocket-simulation \
-  -Dimage.tag=2.0.0
+  -Dimage.tag=2.0.0 \
+  -Dimage.source=https://github.com/stanimirivanov/rsocket-simulation
+
 mvn docker:push \
   -Dimage.name=registry.example.com/performance/rsocket-simulation \
   -Dimage.tag=2.0.0
 ```
 
-The Docker daemon and registry credentials must be available to Maven.
+`image.name` is the complete registry/repository name and `image.tag` is kept
+separate so CI can publish the same repository under a release or Git SHA tag.
+The Docker daemon and registry credentials must be available to Maven; Fabric8
+uses the normal Docker credential configuration.
+
+For repeatable release builds, override the base image with an immutable digest
+rather than relying on the mutable default tag:
+
+```shell
+mvn clean package -Pimage \
+  -Dimage.name=registry.example.com/performance/rsocket-simulation \
+  -Dimage.tag="$GIT_COMMIT" \
+  -Dimage.base="eclipse-temurin:25-jre@sha256:<verified-digest>" \
+  -Dimage.source="https://github.com/stanimirivanov/rsocket-simulation"
+```
+
+The Maven archive timestamp and OCI `created` label are fixed by
+`project.build.outputTimestamp`, making application artifacts stable for the
+same source tree. Update that property intentionally for a release. For exact
+deployment identity, pass the pushed image digest to Helm rather than a mutable
+tag.
+
+### Publishing to GitHub Container Registry
+
+The `Publish container image` GitHub Actions workflow tests the application,
+builds the image through the Fabric8 Maven profile, and publishes it to GHCR.
+It uses the short-lived repository `GITHUB_TOKEN`; no registry password or
+personal access token is required.
+
+Push a version tag to publish a release image. A leading `v` is removed from
+the image tag:
+
+```shell
+git tag v2.0.0
+git push origin v2.0.0
+# Publishes ghcr.io/stanimirivanov/rsocket-simulation:2.0.0
+```
+
+The workflow can also be started from **Actions → Publish container image → Run
+workflow**. Supply `image_tag` to choose a tag, or leave it empty to publish
+`sha-<12-character-commit>`.
+
+The workflow grants only `contents: read` and `packages: write`. Repository or
+organization policy must permit GitHub Actions to create packages. Package
+visibility can be adjusted after the first publication in the repository's
+package settings.
 
 ## Helm
 

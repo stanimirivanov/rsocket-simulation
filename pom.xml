@@ -18,9 +18,12 @@
 
     <properties>
         <java.version>25</java.version>
+        <project.build.outputTimestamp>2026-08-04T00:00:00Z</project.build.outputTimestamp>
         <docker-maven-plugin.version>0.48.1</docker-maven-plugin.version>
         <image.name>rsocket-simulation</image.name>
         <image.tag>${project.version}</image.tag>
+        <image.base>eclipse-temurin:25-jre</image.base>
+        <image.source>https://github.com/stanimirivanov/rsocket-simulation</image.source>
     </properties>
 
     <dependencies>
@@ -64,11 +67,20 @@
                         <image>
                             <name>${image.name}:${image.tag}</name>
                             <build>
-                                <from>eclipse-temurin:25-jre</from>
+                                <from>${image.base}</from>
+                                <labels>
+                                    <org.opencontainers.image.title>${project.name}</org.opencontainers.image.title>
+                                    <org.opencontainers.image.description>${project.description}</org.opencontainers.image.description>
+                                    <org.opencontainers.image.version>${project.version}</org.opencontainers.image.version>
+                                    <org.opencontainers.image.source>${image.source}</org.opencontainers.image.source>
+                                    <org.opencontainers.image.created>${project.build.outputTimestamp}</org.opencontainers.image.created>
+                                </labels>
                                 <assembly>
                                     <descriptorRef>artifact</descriptorRef>
                                     <targetDir>/opt/app</targetDir>
                                 </assembly>
+                                <user>10001</user>
+                                <workdir>/opt/app</workdir>
                                 <entryPoint>
                                     <exec>
                                         <arg>java</arg>
@@ -77,9 +89,6 @@
                                         <arg>/opt/app/${project.build.finalName}.jar</arg>
                                     </exec>
                                 </entryPoint>
-                                <ports>
-                                    <port>8080</port>
-                                </ports>
                             </build>
                         </image>
                     </images>
@@ -87,4 +96,27 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>image</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.fabric8</groupId>
+                        <artifactId>docker-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>build-container-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>build</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

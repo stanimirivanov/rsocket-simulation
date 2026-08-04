@@ -1,0 +1,106 @@
+name: Publish container image
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Image tag to publish (defaults to sha-<commit>)
+        required: false
+        type: string
+
+concurrency:
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Test, build, and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Java 25 and Maven cache
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Resolve image coordinates
+        id: image
+        shell: bash
+        env:
+          REQUESTED_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
+          if [[ -n "${REQUESTED_TAG}" ]]; then
+            tag="${REQUESTED_TAG}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME#v}"
+          else
+            tag="sha-${GITHUB_SHA::12}"
+          fi
+
+          if [[ ! "${tag}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "Invalid OCI image tag: ${tag}" >&2
+            exit 1
+          fi
+
+          created="$(git show -s --format=%cI "${GITHUB_SHA}")"
+          source="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+
+          echo "repository=${repository}" >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "created=${created}" >> "${GITHUB_OUTPUT}"
+          echo "source=${source}" >> "${GITHUB_OUTPUT}"
+          echo "image=${repository}:${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test and build image with Fabric8
+        env:
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+          IMAGE_SOURCE: ${{ steps.image.outputs.source }}
+          BUILD_TIMESTAMP: ${{ steps.image.outputs.created }}
+        run: |
+          mvn --batch-mode --no-transfer-progress clean verify -Pimage \
+            -Dimage.name="${IMAGE_REPOSITORY}" \
+            -Dimage.tag="${IMAGE_TAG}" \
+            -Dimage.source="${IMAGE_SOURCE}" \
+            -Dproject.build.outputTimestamp="${BUILD_TIMESTAMP}"
+
+      - name: Push image to GHCR with Fabric8
+        env:
+          IMAGE_REPOSITORY: ${{ steps.image.outputs.repository }}
+          IMAGE_TAG: ${{ steps.image.outputs.tag }}
+        run: |
+          mvn --batch-mode --no-transfer-progress docker:push \
+            -Dimage.name="${IMAGE_REPOSITORY}" \
+            -Dimage.tag="${IMAGE_TAG}"
+
+      - name: Publish workflow summary
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          echo "### Published image" >> "${GITHUB_STEP_SUMMARY}"
+          echo "\`${IMAGE}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Pull with: \`docker pull ${IMAGE}\`" >> "${GITHUB_STEP_SUMMARY}"
