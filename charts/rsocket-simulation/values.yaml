@@ -15,6 +15,7 @@ simulation:
   keepAliveLifetime: PT30S
   reconnectDelay: PT2S
   payloadMessage: hello from the RSocket simulator
+  exitOnCompletion: true
 
 job:
   backoffLimitPerIndex: 1

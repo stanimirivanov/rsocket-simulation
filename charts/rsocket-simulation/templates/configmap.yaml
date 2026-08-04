@@ -14,3 +14,4 @@ data:
   SIMULATION_KEEP_ALIVE_LIFETIME: {{ .Values.simulation.keepAliveLifetime | quote }}
   SIMULATION_RECONNECT_DELAY: {{ .Values.simulation.reconnectDelay | quote }}
   SIMULATION_PAYLOAD_MESSAGE: {{ .Values.simulation.payloadMessage | quote }}
+  SIMULATION_EXIT_ON_COMPLETION: {{ .Values.simulation.exitOnCompletion | quote }}

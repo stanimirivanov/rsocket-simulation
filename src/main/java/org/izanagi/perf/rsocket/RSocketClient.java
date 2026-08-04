@@ -1,16 +1,14 @@
 package org.izanagi.perf.rsocket;
 
-import io.rsocket.RSocket;
 import org.izanagi.perf.rsocket.data.SimulationPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.stereotype.Component;
-import reactor.core.publisher.Flux;
+import org.springframework.http.MediaType;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
-import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Component
@@ -39,24 +37,31 @@ public class RSocketClient {
     }
 
     private Mono<RSocketRequester> connect(String clientId) {
-        return requesterBuilder
-                .rsocketConnector(connector -> connector.keepAlive(
-                        properties.keepAliveInterval(), properties.keepAliveLifetime()))
-                .websocket(properties.serverUri())
+        return Mono.fromSupplier(() -> {
+                    RSocketRequester.Builder builder = requesterBuilder
+                            .dataMimeType(MediaType.APPLICATION_JSON)
+                            .rsocketConnector(connector -> connector.keepAlive(
+                                    properties.keepAliveInterval(), properties.keepAliveLifetime()));
+                    return switch (properties.serverUri().getScheme()) {
+                        case "ws", "wss" -> builder.websocket(properties.serverUri());
+                        case "tcp" -> builder.tcp(properties.serverUri().getHost(),
+                                properties.serverUri().getPort());
+                        default -> throw new IllegalArgumentException(
+                                "Unsupported RSocket URI scheme: " + properties.serverUri().getScheme());
+                    };
+                })
                 .doOnNext(ignored -> log.debug("Connected client {}", clientId));
     }
 
     private Mono<Void> holdConnection(RSocketRequester requester, String clientId) {
         SimulationPayload payload = new SimulationPayload(clientId, properties.shardIndex(),
                 properties.payloadMessage());
-        RSocket rsocket = requester.rsocket();
-        Mono<Void> stream = requester.route(properties.route())
+        return requester.route(properties.route())
                 .data(payload)
                 .retrieveFlux(Object.class)
                 .doOnNext(ignored -> messages.incrementAndGet())
-                .then();
-        return Mono.firstWithSignal(stream, rsocket.onClose())
-                .doFinally(ignored -> rsocket.dispose());
+                .then()
+                .doFinally(ignored -> requester.dispose());
     }
 
     public long messageCount() {

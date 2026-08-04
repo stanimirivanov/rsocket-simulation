@@ -17,6 +17,7 @@ simulation:
   reconnect-delay: ${SIMULATION_RECONNECT_DELAY:PT2S}
   shard-index: ${JOB_COMPLETION_INDEX:0}
   payload-message: ${SIMULATION_PAYLOAD_MESSAGE:hello from the RSocket simulator}
+  exit-on-completion: ${SIMULATION_EXIT_ON_COMPLETION:true}
 
 logging:
   level:
